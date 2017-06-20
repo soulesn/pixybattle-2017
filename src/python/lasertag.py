@@ -75,7 +75,7 @@ advance = 0
 # this gain currently modulates the forward drive enhancement
 driveGain = 1
 # body turning p-gain
-h_pgain = 0.5
+h_pgain = 5
 # body turning d-gain
 h_dgain = 0
 
@@ -87,15 +87,15 @@ h_dgain = 0
 # pixel to visual angle conversion factor (only rough approximation) (pixyViewV/pixyImgV + pixyViewH/pixyImgH) / 2
 pix2ang_factor = 0.117
 # reference object one is the pink earplug (~12mm wide)
-refSize1 = 12
+refSize1 = 127
 # reference object two is side post (~50mm tall)
 refSize2 = 50
 # this is the distance estimation of an object
 objectDist = 0
 # this is some desired distance to keep (mm)
-targetDist = 100
+targetDist = 10
 # reference distance; some fix distance to compare the object distance with
-refDist = 400
+refDist = 1000
 
 blocks = None
 
@@ -164,6 +164,10 @@ def setup():
 
 killed = False
 
+def turnNinety():
+    diffDrive = 1;
+    throttle = 1;
+    
 def loop():
     """
     Main loop, Gets blocks from pixy, analyzes target location,
@@ -192,6 +196,8 @@ def loop():
     while not pixy.pixy_blocks_are_new() and run_flag:
         pass
     count = pixy.pixy_get_blocks(BLOCK_BUFFER_SIZE, blocks)
+    if count==0:
+        print "no blocks"
     # If negative blocks, something went wrong
     if count < 0:
         print 'Error: pixy_get_blocks() [%d] ' % count
@@ -210,29 +216,42 @@ def loop():
 
         lastTime = currentTime
         # if the largest block is the object to pursue, then prioritize this behavior
-        if blocks[0].signature == 1:
-            panError = PIXY_X_CENTER - blocks[0].x
-            objectDist = refSize1 / (2 * math.tan(math.radians(blocks[0].width * pix2ang_factor)))
-            throttle = 0.5
-            # amount of steering depends on how much deviation is there
-            diffDrive = diffGain * abs(float(panError)) / PIXY_X_CENTER
-            distError = objectDist - targetDist
-            # this is in float format with sign indicating advancing or retreating
-            advance = driveGain * float(distError) / refDist
-        # if Pixy sees a guideline, perform line following algorithm
-        elif blocks[0].signature == 2:
-            panError = PIXY_X_CENTER-blocks[0].x
-            throttle = 1.0
-            diffDrive = 0.6
-            # amount of steering depends on how much deviation is there
-            # diffDrive = diffGain * abs(float(turnError)) / PIXY_X_CENTER
-            # use full available throttle for charging forward
-            advance = 1            
-        # if none of the blocks make sense, just pause
+
+        throttle = 0
+        panError = 0
+
+        #first get biggest blue block
+        biggestBlueBlockIndex = -1
+        currentIndex = 0
+        GREEN = 1
+        BLUE = 3
+        while (currentIndex<10 and biggestBlueBlockIndex ==-1):
+            if blocks[currentIndex].signature == GREEN:
+                biggestBlueBlockIndex = currentIndex
+            currentIndex=currentIndex+1
+        print('biggest blue block index', biggestBlueBlockIndex);
+        if biggestBlueBlockIndex > -1:
+            if blocks[biggestBlueBlockIndex].signature == GREEN:
+                print "1"
+                panError = PIXY_X_CENTER - blocks[biggestBlueBlockIndex].x #100 - blocks[biggestBlueBlockIndex].x
+                objectDist = refSize1 / (2 * math.tan(math.radians(blocks[biggestBlueBlockIndex].width * pix2ang_factor)))
+                print ('object dist', objectDist, 'width',blocks[biggestBlueBlockIndex].width)
+                throttle = 0.5
+                # amount of steering depends on how much deviation is there
+                diffDrive = diffGain * abs(float(panError)) / PIXY_X_CENTER
+                distError = objectDist - targetDist
+                # this is in float format with sign indicating advancing or retreating
+                advance = driveGain * float(distError) / refDist #max(1,driveGain * float(distError) / refDist)
+                print(advance)
+                # if none of the blocks make sense, just pause
+            else:
+                print "3"
+                panError = 0
+                throttle = 0.0
+                diffDrive = 1
         else:
-            panError = 0
-            throttle = 0.0
-            diffDrive = 1
+            throttle = 0;
+            
         panLoop.update(panError)
 
     # Update pixy's pan position
@@ -243,6 +262,7 @@ def loop():
     if time_difference.total_seconds() >= timeout:
         throttle = 0.0
         diffDrive = 1
+        #print "4"
 
     # this is turning to left
     if panLoop.m_pos > PIXY_RCS_CENTER_POS:
@@ -250,12 +270,15 @@ def loop():
         turnError = panLoop.m_pos - PIXY_RCS_CENTER_POS
         # <0 is turning left; currently only p-control is implemented
         bias = - float(turnError) / float(PIXY_RCS_CENTER_POS) * h_pgain
+        #print "5"
+
     # this is turning to right
     elif panLoop.m_pos < PIXY_RCS_CENTER_POS:
         # should be still int32_t
         turnError = PIXY_RCS_CENTER_POS - panLoop.m_pos
         # >0 is turning left; currently only p-control is implemented
         bias = float(turnError) / float(PIXY_RCS_CENTER_POS) * h_pgain
+       # print "6"
     drive()
     return run_flag
 
@@ -264,11 +287,11 @@ def drive():
     synDrive = advance * (1 - diffDrive) * throttle * totalDrive
     leftDiff = bias * diffDrive * throttle * totalDrive
     rightDiff = -bias * diffDrive * throttle * totalDrive
-
+  
     # construct the drive levels
     LDrive = (synDrive + leftDiff)
     RDrive = (synDrive + rightDiff)
-
+    #print ("LDrive: ",LDrive," RDrive: ",RDrive)
     # Make sure that it is outside dead band and less than the max
     if LDrive > deadband:
         if LDrive > MAX_MOTOR_SPEED:
