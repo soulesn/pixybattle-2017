@@ -76,6 +76,7 @@ advance = 0
 driveGain = 1
 # body turning p-gain
 h_pgain = 5
+#h_pgain = 0.5
 # body turning d-gain
 h_dgain = 0
 
@@ -87,13 +88,15 @@ h_dgain = 0
 # pixel to visual angle conversion factor (only rough approximation) (pixyViewV/pixyImgV + pixyViewH/pixyImgH) / 2
 pix2ang_factor = 0.117
 # reference object one is the pink earplug (~12mm wide)
-refSize1 = 127
+#refSize1 = 127
+refSize1 = 250
 # reference object two is side post (~50mm tall)
 refSize2 = 50
 # this is the distance estimation of an object
 objectDist = 0
 # this is some desired distance to keep (mm)
-targetDist = 10
+#targetDist = 10
+targetDist = 1000
 # reference distance; some fix distance to compare the object distance with
 refDist = 1000
 
@@ -186,6 +189,7 @@ def loop():
         #if code=="E4F74E5A" or code=="A8FA9FFD":
         #    killed = False
 
+    ### Don't Change this ####
     if killed:
         print "I'm hit!"
         motors.setSpeeds(0, 0)
@@ -206,12 +210,12 @@ def loop():
     # if more than one block
     # Check which the largest block's signature and either do target chasing or
     # line following
-    if count > 0:
-
+    if count > -1:
+        print "inside loop"
         time_difference = currentTime - lastFire
         if time_difference.total_seconds() >= 1:
             print "Fire!"
-            ser.write("FIRE\n")
+         #   ser.write("FIRE\n")
             lastFire = currentTime
 
         lastTime = currentTime
@@ -221,21 +225,38 @@ def loop():
         panError = 0
 
         #first get biggest blue block
-        biggestBlueBlockIndex = -1
+        biggestGreenBlockIndex = -1
+        biggestTeamBlockIndex = -1
+        biggestOpponentBlockIndex = -1
         currentIndex = 0
+        targetFound = -1
+        targetTime = (currentTime-currentTime).total_seconds()
         GREEN = 1
+        RED = 2
         BLUE = 3
-        while (currentIndex<10 and biggestBlueBlockIndex ==-1):
-            if blocks[currentIndex].signature == GREEN:
-                biggestBlueBlockIndex = currentIndex
+
+        Team = RED
+        if Team == RED:
+            Opponent = BLUE
+        else:
+            Opponent = RED
+            
+        while currentIndex<10:
+            if blocks[currentIndex].signature == GREEN and biggestGreenBlockIndex ==-1:
+                biggestGreenBlockIndex = currentIndex
+            if blocks[currentIndex].signature == Team and biggestTeamBlockIndex == -1:
+                biggestTeamBlockIndex = currentIndex
             currentIndex=currentIndex+1
-        print('biggest blue block index', biggestBlueBlockIndex);
-        if biggestBlueBlockIndex > -1:
-            if blocks[biggestBlueBlockIndex].signature == GREEN:
+        print('biggest green block index', biggestGreenBlockIndex);
+        if (biggestGreenBlockIndex > biggestTeamBlockIndex and targetTimeDifference.total_seconds()<3):
+            if blocks[biggestGreenBlockIndex].signature == GREEN:
+                if targetTime ==0:
+                    targetTime = currentTime;
                 print "1"
-                panError = PIXY_X_CENTER - blocks[biggestBlueBlockIndex].x #100 - blocks[biggestBlueBlockIndex].x
-                objectDist = refSize1 / (2 * math.tan(math.radians(blocks[biggestBlueBlockIndex].width * pix2ang_factor)))
-                print ('object dist', objectDist, 'width',blocks[biggestBlueBlockIndex].width)
+                print "Found Green signature"
+                panError = PIXY_X_CENTER - blocks[biggestGreenBlockIndex].x #100 - blocks[biggestGreenBlockIndex].x
+                objectDist = refSize1 / (2 * math.tan(math.radians(blocks[biggestGreenBlockIndex].width * pix2ang_factor)))
+                print ('object dist', objectDist, 'width',blocks[biggestGreenBlockIndex].width)
                 throttle = 0.5
                 # amount of steering depends on how much deviation is there
                 diffDrive = diffGain * abs(float(panError)) / PIXY_X_CENTER
@@ -244,13 +265,11 @@ def loop():
                 advance = driveGain * float(distError) / refDist #max(1,driveGain * float(distError) / refDist)
                 print(advance)
                 # if none of the blocks make sense, just pause
-            else:
-                print "3"
-                panError = 0
-                throttle = 0.0
-                diffDrive = 1
         else:
-            throttle = 0;
+            panError = PIXY_X_CENTER-PIXY_MAX_X
+            diffDrive = diffGain * abs(float(panError)) / PIXY_X_CENTER
+            throttle = 0.5
+            targetTime = currentTime-currentTime
             
         panLoop.update(panError)
 
