@@ -76,10 +76,13 @@ advance = 0
 driveGain = 1
 # body turning p-gain
 h_pgain = 5
+i_control = 0.1
+d_control = 0.1
 #h_pgain = 0.5
 # body turning d-gain
 h_dgain = 0
-
+turnErrorAccumulator = 0
+turnErrorPrevious = 0
 #### defining state estimation variables
 # pixyViewV = 47
 # pixyViewH = 75
@@ -89,18 +92,21 @@ h_dgain = 0
 pix2ang_factor = 0.117
 # reference object one is the pink earplug (~12mm wide)
 #refSize1 = 127
-refSize1 = 250
+refSize = 120
 # reference object two is side post (~50mm tall)
 refSize2 = 50
 # this is the distance estimation of an object
 objectDist = 0
 # this is some desired distance to keep (mm)
 #targetDist = 10
-targetDist = 1000
+targetDist = 100
 # reference distance; some fix distance to compare the object distance with
 refDist = 1000
 
 blocks = None
+
+targetTime = 0
+targetTimeDifference = 0
 
 def handle_SIGINT(sig, frame):
     """
@@ -177,7 +183,7 @@ def loop():
     chooses action for robot and sends instruction to motors
     """
     global blocks, throttle, diffDrive, diffGain, bias, advance, turnError, currentTime, lastTime, objectDist, distError, panError_prev, distError_prev, panLoop, killed, lastFire
-
+    global targetTime, targetTimeDifference, turnErrorAccumulator, turnErrorPrevious
     if ser.in_waiting:
         print "Reading line from serial.."
         code = ser.readline().rstrip()
@@ -210,72 +216,81 @@ def loop():
     # if more than one block
     # Check which the largest block's signature and either do target chasing or
     # line following
-    if count > -1:
-        print "inside loop"
-        time_difference = currentTime - lastFire
-        if time_difference.total_seconds() >= 1:
-            print "Fire!"
-         #   ser.write("FIRE\n")
-            lastFire = currentTime
 
-        lastTime = currentTime
-        # if the largest block is the object to pursue, then prioritize this behavior
+    time_difference = currentTime - lastFire
+    if time_difference.total_seconds() >= 1:
+        print "Fire!"
+        ser.write("FIRE\n")
+        lastFire = currentTime
 
-        throttle = 0
-        panError = 0
+    lastTime = currentTime
+    # if the largest block is the object to pursue, then prioritize this behavior
 
-        #first get biggest blue block
-        biggestGreenBlockIndex = -1
-        biggestTeamBlockIndex = -1
-        biggestOpponentBlockIndex = -1
-        currentIndex = 0
-        targetFound = -1
-        targetTime = (currentTime-currentTime).total_seconds()
-        GREEN = 1
-        RED = 2
-        BLUE = 3
+    throttle = 0
+    panError = 0
 
-        Team = RED
-        if Team == RED:
-            Opponent = BLUE
-        else:
-            Opponent = RED
-            
-        while currentIndex<10:
-            if blocks[currentIndex].signature == GREEN and biggestGreenBlockIndex ==-1:
-                biggestGreenBlockIndex = currentIndex
-            if blocks[currentIndex].signature == Team and biggestTeamBlockIndex == -1:
-                biggestTeamBlockIndex = currentIndex
-            currentIndex=currentIndex+1
-        print('biggest green block index', biggestGreenBlockIndex);
-        if (biggestGreenBlockIndex > biggestTeamBlockIndex and targetTimeDifference.total_seconds()<3):
-            if blocks[biggestGreenBlockIndex].signature == GREEN:
-                if targetTime ==0:
-                    targetTime = currentTime;
-                print "1"
-                print "Found Green signature"
-                panError = PIXY_X_CENTER - blocks[biggestGreenBlockIndex].x #100 - blocks[biggestGreenBlockIndex].x
-                objectDist = refSize1 / (2 * math.tan(math.radians(blocks[biggestGreenBlockIndex].width * pix2ang_factor)))
-                print ('object dist', objectDist, 'width',blocks[biggestGreenBlockIndex].width)
-                throttle = 0.5
-                # amount of steering depends on how much deviation is there
-                diffDrive = diffGain * abs(float(panError)) / PIXY_X_CENTER
-                distError = objectDist - targetDist
-                # this is in float format with sign indicating advancing or retreating
-                advance = driveGain * float(distError) / refDist #max(1,driveGain * float(distError) / refDist)
-                print(advance)
-                # if none of the blocks make sense, just pause
-        else:
-            panError = PIXY_X_CENTER-PIXY_MAX_X
+    #first get biggest blue block
+    biggestGreenBlockIndex = 999
+    biggestTeamBlockIndex = 999
+    biggestOpponentBlockIndex = -1
+    currentIndex = 0
+    targetFound = -1
+    GREEN = 1
+    RED = 2
+    BLUE = 3
+
+    Team = RED
+    if Team == RED:
+        Opponent = BLUE
+    else:
+        Opponent = RED
+        
+    while currentIndex<10:
+        if blocks[currentIndex].signature == GREEN and biggestGreenBlockIndex ==999:
+            biggestGreenBlockIndex = currentIndex
+        if blocks[currentIndex].signature == Team and biggestTeamBlockIndex == 999:
+            biggestTeamBlockIndex = currentIndex
+        currentIndex=currentIndex+1
+    print('biggest green block index', biggestGreenBlockIndex, 'time', targetTimeDifference, 'team index', biggestTeamBlockIndex);
+    if (biggestGreenBlockIndex < biggestTeamBlockIndex and targetTimeDifference<5):
+        if blocks[biggestGreenBlockIndex].signature == GREEN:
+            if targetTime == 0:
+                targetTime = currentTime;
+            if targetTimeDifference <=1:
+                throttle = 0.2
+                objectDist = 300
+            else:
+                throttle = 0.7
+                objectDist = refSize / (2 * math.tan(math.radians(blocks[biggestGreenBlockIndex].width * pix2ang_factor)))
+
+            diffGain = 1
+            print "Found Green signature"
+            panError = PIXY_X_CENTER - (blocks[biggestGreenBlockIndex].x)# +int(35*math.sin(5*targetTimeDifference))) #100 - blocks[biggestGreenBlockIndex].x
+            temp = blocks[biggestGreenBlockIndex].x+10*math.sin(5*targetTimeDifference)
+            print ('object dist', objectDist, 'width',blocks[biggestGreenBlockIndex].width, 'newX', temp)
+            # amount of steering depends on how much deviation is there
             diffDrive = diffGain * abs(float(panError)) / PIXY_X_CENTER
-            throttle = 0.5
-            targetTime = currentTime-currentTime
-            
-        panLoop.update(panError)
+            distError = objectDist - targetDist
+            # this is in float format with sign indicating advancing or retreating
+            advance = driveGain * float(distError) / refDist #max(1,driveGain * float(distError) / refDist)
+            print('advance', advance, 'diffDrive', diffDrive)
+            targetTimeDifference = (currentTime-targetTime).total_seconds()
+            # if none of the blocks make sense, just pause
+    else:
+        panError = PIXY_X_CENTER-PIXY_MAX_X
+        diffDrive = diffGain * abs(float(panError)) / PIXY_X_CENTER
+        throttle = 0.12
+        bias = 0.2
+        advance = 1
+        targetTime = 0
+        turnErrorAccumulator = 0
+        targetTimeDifference=0
 
+        
+    panLoop.update(panError)
     # Update pixy's pan position
     pixy.pixy_rcs_set_position(PIXY_RCS_PAN_CHANNEL, panLoop.m_pos)
-
+    
     # if Pixy sees nothing recognizable, don't move.
     time_difference = currentTime - lastTime
     if time_difference.total_seconds() >= timeout:
@@ -284,19 +299,33 @@ def loop():
         #print "4"
 
     # this is turning to left
-    if panLoop.m_pos > PIXY_RCS_CENTER_POS:
-        # should be still int32_t
-        turnError = panLoop.m_pos - PIXY_RCS_CENTER_POS
-        # <0 is turning left; currently only p-control is implemented
-        bias = - float(turnError) / float(PIXY_RCS_CENTER_POS) * h_pgain
-        #print "5"
-
-    # this is turning to right
-    elif panLoop.m_pos < PIXY_RCS_CENTER_POS:
-        # should be still int32_t
+    if panLoop.m_pos != PIXY_RCS_CENTER_POS:
         turnError = PIXY_RCS_CENTER_POS - panLoop.m_pos
-        # >0 is turning left; currently only p-control is implemented
-        bias = float(turnError) / float(PIXY_RCS_CENTER_POS) * h_pgain
+        turnErrorAccumulator += turnError
+        derivative = (turnError - turnErrorPrevious)/float(PIXY_RCS_CENTER_POS);
+        turnErrorPrevious = turnError;
+        bias = float(turnError) / float(PIXY_RCS_CENTER_POS) * h_pgain+i_control*float(turnErrorAccumulator) / float(PIXY_RCS_CENTER_POS) + d_control*derivative
+
+    print('bias', bias)
+##    if panLoop.m_pos > PIXY_RCS_CENTER_POS:
+##        # should be still int32_t
+##        turnError = panLoop.m_pos - PIXY_RCS_CENTER_POS
+##        # <0 is turning left; currently only p-control is implemented
+##        turnErrorAccumulator -= turnError
+##        derivative = (turnError - turnErrorPrevious)/float(PIXY_RCS_CENTER_POS);
+##        turnErrorPrevious = turnError;
+##        bias = - float(turnError) / float(PIXY_RCS_CENTER_POS) * h_pgain + i_control*float(turnErrorAccumulator)/float(PIXY_RCS_CENTER_POS)
+##        print('turn left bias', bias)
+##        #print "5"
+##
+##    # this is turning to right
+##    elif panLoop.m_pos < PIXY_RCS_CENTER_POS:
+##        # should be still int32_t
+##        turnError = PIXY_RCS_CENTER_POS - panLoop.m_pos
+##        # >0 is turning left; currently only p-control is implemented
+##        turnErrorAccumulator += turnError
+##        bias = float(turnError) / float(PIXY_RCS_CENTER_POS) * h_pgain+i_control*float(turnErrorAccumulator) / float(PIXY_RCS_CENTER_POS) + d_control*
+##        print('turn right bias', bias)
        # print "6"
     drive()
     return run_flag
