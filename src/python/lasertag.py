@@ -1,4 +1,3 @@
-
 import time
 import sys
 import signal
@@ -232,7 +231,7 @@ def loop():
     #first get biggest blue block
     biggestGreenBlockIndex = 999
     biggestTeamBlockIndex = 999
-    biggestOpponentBlockIndex = -1
+    biggestOpponentBlockIndex = 999
     currentIndex = 0
     targetFound = -1
     GREEN = 1
@@ -248,12 +247,15 @@ def loop():
     while currentIndex<10:
         if blocks[currentIndex].signature == GREEN and biggestGreenBlockIndex ==999:
             biggestGreenBlockIndex = currentIndex
+        if blocks[currentIndex].signature == Opponent and biggestOpponentBlockIndex ==999:
+            biggestOpponentBlockIndex = currentIndex
         if blocks[currentIndex].signature == Team and biggestTeamBlockIndex == 999:
             biggestTeamBlockIndex = currentIndex
         currentIndex=currentIndex+1
-    print('biggest green block index', biggestGreenBlockIndex, 'time', targetTimeDifference, 'team index', biggestTeamBlockIndex);
-    if (biggestGreenBlockIndex < biggestTeamBlockIndex and targetTimeDifference<5):
-        if blocks[biggestGreenBlockIndex].signature == GREEN:
+    print('biggest target index', min(biggestGreenBlockIndex,biggestOpponentBlockIndex), 'time', targetTimeDifference, 'team index', biggestTeamBlockIndex);
+    if ((biggestGreenBlockIndex < biggestTeamBlockIndex or biggestOpponentBlockIndex < biggestTeamBlockIndex) and targetTimeDifference<5):
+        if blocks[biggestGreenBlockIndex].signature == GREEN or blocks[biggestOpponentBlockIndex].signature == BLUE: #do we need this if statement?
+            targetBlockIndex = min(biggestGreenBlockIndex, biggestOpponentBlockIndex)
             if targetTime == 0:
                 targetTime = currentTime;
             if targetTimeDifference <=1:
@@ -261,19 +263,18 @@ def loop():
                 objectDist = 300
             else:
                 throttle = 0.7
-                objectDist = refSize / (2 * math.tan(math.radians(blocks[biggestGreenBlockIndex].width * pix2ang_factor)))
-
+                objectDist = refSize / (2 * math.tan(math.radians(blocks[targetBlockIndex].width * pix2ang_factor)))
             diffGain = 1
-            print "Found Green signature"
-            panError = PIXY_X_CENTER - (blocks[biggestGreenBlockIndex].x)# +int(35*math.sin(5*targetTimeDifference))) #100 - blocks[biggestGreenBlockIndex].x
-            temp = blocks[biggestGreenBlockIndex].x+10*math.sin(5*targetTimeDifference)
-            print ('object dist', objectDist, 'width',blocks[biggestGreenBlockIndex].width, 'newX', temp)
+            #print( "Found Green signature",targetBlockIndex);
+            panError = PIXY_X_CENTER - (blocks[targetBlockIndex].x)# +int(35*math.sin(5*targetTimeDifference))) #100 - blocks[biggestGreenBlockIndex].x
+            temp = blocks[targetBlockIndex].x+10*math.sin(5*targetTimeDifference)
+            #print ('object dist', objectDist, 'width',blocks[targetBlockIndex].width, 'newX', temp)
             # amount of steering depends on how much deviation is there
             diffDrive = diffGain * abs(float(panError)) / PIXY_X_CENTER
             distError = objectDist - targetDist
             # this is in float format with sign indicating advancing or retreating
             advance = driveGain * float(distError) / refDist #max(1,driveGain * float(distError) / refDist)
-            print('advance', advance, 'diffDrive', diffDrive)
+            #print('advance', advance, 'diffDrive', diffDrive)
             targetTimeDifference = (currentTime-targetTime).total_seconds()
             # if none of the blocks make sense, just pause
     else:
@@ -285,6 +286,7 @@ def loop():
         targetTime = 0
         turnErrorAccumulator = 0
         targetTimeDifference=0
+        print('no target blocks','biggest red block index', biggestTeamBlockIndex);
 
         
     panLoop.update(panError)
@@ -306,7 +308,7 @@ def loop():
         turnErrorPrevious = turnError;
         bias = float(turnError) / float(PIXY_RCS_CENTER_POS) * h_pgain+i_control*float(turnErrorAccumulator) / float(PIXY_RCS_CENTER_POS) + d_control*derivative
 
-    print('bias', bias)
+    #print('bias', bias)
 ##    if panLoop.m_pos > PIXY_RCS_CENTER_POS:
 ##        # should be still int32_t
 ##        turnError = panLoop.m_pos - PIXY_RCS_CENTER_POS
