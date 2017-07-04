@@ -14,11 +14,24 @@ baudRate = 9600
 while True:
     try:
         ser = serial.Serial(serialDevice, baudRate)
+        ser.write("TEAM\n")
+        MY_COLOR=ser.readline().rstrip()
         break
     except:
         print "Could not open serial device %s"%serialDevice
         time.sleep(10)
 
+GREEN = 1
+RED = 2
+BLUE = 3
+
+if MY_COLOR == "RED":
+    Team = RED
+    Opponent = BLUE
+else:
+    Team = BLUE
+    Opponent = RED
+     
 ##### defining PixyCam sensory variables
 PIXY_MIN_X = 0
 PIXY_MAX_X = 319
@@ -234,16 +247,6 @@ def loop():
     biggestOpponentBlockIndex = 999
     currentIndex = 0
     targetFound = -1
-    GREEN = 1
-    RED = 2
-    BLUE = 3
-
-    Team = RED
-    if Team == RED:
-        Opponent = BLUE
-    else:
-        Opponent = RED
-        
     while currentIndex<10:
         if blocks[currentIndex].signature == GREEN and biggestGreenBlockIndex ==999:
             biggestGreenBlockIndex = currentIndex
