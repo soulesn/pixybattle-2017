@@ -229,7 +229,7 @@ def executeBehavior():
     print('bias', bias, 'diffDrive', diffDrive, 'throttle', throttle, 'advance', advance)
     global currentBehaviorIndex
     if (currentBehaviorIndex>=len(behaviors)):
-        return -1
+        previousBenchTime = None
     currentTime = datetime.now()
     if (previousBenchTime != None):
         elapsedTime = (currentTime - previousBenchTime).total_seconds()
@@ -462,6 +462,7 @@ if __name__ == '__main__':
         motors.setSpeeds(0, 0)
         print
         "Robot Shutdown Completed"
+
 
 
 
