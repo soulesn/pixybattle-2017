@@ -229,7 +229,8 @@ def executeBehavior():
     print('bias', bias, 'diffDrive', diffDrive, 'throttle', throttle, 'advance', advance)
     global currentBehaviorIndex
     if (currentBehaviorIndex>=len(behaviors)):
-        previousBenchTime = None
+        currentBehaviorIndex = 0
+        setSpeedVals(behaviors[currentBehaviorIndex])
     currentTime = datetime.now()
     if (previousBenchTime != None):
         elapsedTime = (currentTime - previousBenchTime).total_seconds()
@@ -255,7 +256,7 @@ def loop():
     chooses action for robot and sends instruction to motors
     """
     global blocks, throttle, diffDrive, diffGain, bias, advance, turnError, currentTime, lastTime, objectDist, distError, panError_prev, distError_prev, panLoop, killed, lastFire
-    global targetTime, targetTimeDifference, turnErrorAccumulator, exploreTime, exploreTimeDifference, turnErrorPrevious
+    global targetTime, targetTimeDifference, counterExplore, turnErrorAccumulator, exploreTime, exploreTimeDifference, turnErrorPrevious
     # if ser.in_waiting:
     #    print "Reading line from serial.."
     #    code = ser.readline().rstrip()
@@ -328,8 +329,7 @@ def loop():
         if blocks[targetBlockIndex].width > 30:
             targetBigEnough = 1
     # print('biggest target index', min(biggestGreenBlockIndex,biggestOpponentBlockIndex), 'time', targetTimeDifference, 'team index', biggestTeamBlockIndex);
-    if ((
-                biggestGreenBlockIndex < biggestTeamBlockIndex or biggestOpponentBlockIndex < biggestTeamBlockIndex) and targetTimeDifference < 5 and avoidCollision == 0 and targetBigEnough == 1):
+    if ((biggestGreenBlockIndex < biggestTeamBlockIndex or biggestOpponentBlockIndex < biggestTeamBlockIndex) and counterExplore<0 and targetTimeDifference < 5 and avoidCollision == 0 and targetBigEnough == 1):
         # if blocks[biggestGreenBlockIndex].signature == GREEN or blocks[biggestOpponentBlockIndex].signature == BLUE: #do we need this if statement?
         print("attacking");
         targetBlockIndex = min(biggestGreenBlockIndex, biggestOpponentBlockIndex)
@@ -360,10 +360,12 @@ def loop():
         # if none of the blocks make sense, just pause
     else:
         if exploreTime == 0:
+            counterExplore = 100
             explore_behavior_list = [explore_behavior_1, explore_behavior_2]
             loadBehavior(explore_behavior_list)
             exploreTime = currentTime 
         else:
+            counterExplore = counterExplore - 1
             panError = 0
             executeBehavior()
         targetTime = 0
@@ -462,6 +464,7 @@ if __name__ == '__main__':
         motors.setSpeeds(0, 0)
         print
         "Robot Shutdown Completed"
+
 
 
 
