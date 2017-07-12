@@ -120,6 +120,7 @@ behaviors = list()
 # stores the last bench time
 previousBenchTime = None
 # current index in behavior sequence
+currentBehavior = None
 currentBehaviorIndex = None
 
 blocks = None
@@ -214,15 +215,17 @@ def loadBehavior(behaviorList):
     currentBehaviorIndex = 0
 
 def setSpeedVals(newBehavior):
-    global diffDrive, bias, throttle, advance, previousBenchTime
+    global diffDrive, bias, throttle, advance, currentBehavior, previousBenchTime
     diffDrive = newBehavior['diffDrive']
     bias = newBehavior['bias']
     throttle = newBehavior['throttle']
     advance = newBehavior['advance']
     previousBenchTime = datetime.now()
+    currentBehavior = newBehavior
 
 
 def executeBehavior():
+    global diffDrive, bias, throttle, advance
     print('bias', bias, 'diffDrive', diffDrive, 'throttle', throttle, 'advance', advance)
     global currentBehaviorIndex
     if (currentBehaviorIndex>=len(behaviors)):
@@ -235,6 +238,11 @@ def executeBehavior():
             currentBehaviorIndex = currentBehaviorIndex + 1
             if currentBehaviorIndex<(len(behaviors)):
                 setSpeedVals(behaviors[currentBehaviorIndex])
+        else:
+            diffDrive = currentBehavior['diffDrive']
+            bias = currentBehavior['bias']
+            throttle = currentBehavior['throttle']
+            advance = currentBehavior['advance']
     else:
         currentBehaviorIndex = 0
         setSpeedVals(behaviors[currentBehaviorIndex])
@@ -454,6 +462,7 @@ if __name__ == '__main__':
         motors.setSpeeds(0, 0)
         print
         "Robot Shutdown Completed"
+
 
 
 
