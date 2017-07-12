@@ -119,6 +119,8 @@ blocks = None
 
 targetTime = 0
 targetTimeDifference = 0
+exploreTime = 0
+exploreTimeDifference = 0
 
 def handle_SIGINT(sig, frame):
     """
@@ -195,12 +197,12 @@ def loop():
     chooses action for robot and sends instruction to motors
     """
     global blocks, throttle, diffDrive, diffGain, bias, advance, turnError, currentTime, lastTime, objectDist, distError, panError_prev, distError_prev, panLoop, killed, lastFire
-    global targetTime, targetTimeDifference, turnErrorAccumulator, turnErrorPrevious
-    if ser.in_waiting:
-        print "Reading line from serial.."
-        code = ser.readline().rstrip()
-        print "Got IR code %s" % code
-        killed = True
+    global targetTime, targetTimeDifference, turnErrorAccumulator, exploreTime, exploreTimeDifference, turnErrorPrevious
+    #if ser.in_waiting:
+    #    print "Reading line from serial.."
+    #    code = ser.readline().rstrip()
+    #    print "Got IR code %s" % code
+    #    killed = True
         #if code=="58391E4E" or code=="9DF14DB3" or code=="68B92":
         #    killed = True
         #
@@ -208,10 +210,10 @@ def loop():
         #    killed = False
 
     ### Don't Change this ####
-    if killed:
-        print "I'm hit!"
-        motors.setSpeeds(0, 0)
-        time.sleep(5)
+    #if killed:
+    #    print "I'm hit!"
+        #motors.setSpeeds(0, 0)
+        #time.sleep(5)
 
     currentTime = datetime.now()
     # If no new blocks, don't do anything
@@ -255,42 +257,71 @@ def loop():
         if blocks[currentIndex].signature == Team and biggestTeamBlockIndex == 999:
             biggestTeamBlockIndex = currentIndex
         currentIndex=currentIndex+1
-    print('biggest target index', min(biggestGreenBlockIndex,biggestOpponentBlockIndex), 'time', targetTimeDifference, 'team index', biggestTeamBlockIndex);
-    if ((biggestGreenBlockIndex < biggestTeamBlockIndex or biggestOpponentBlockIndex < biggestTeamBlockIndex) and targetTimeDifference<5):
-        if blocks[biggestGreenBlockIndex].signature == GREEN or blocks[biggestOpponentBlockIndex].signature == BLUE: #do we need this if statement?
-            targetBlockIndex = min(biggestGreenBlockIndex, biggestOpponentBlockIndex)
-            if targetTime == 0:
-                targetTime = currentTime;
-            if targetTimeDifference <=1:
-                throttle = 0.2
-                objectDist = 300
-            else:
-                throttle = 0.7
-                objectDist = refSize / (2 * math.tan(math.radians(blocks[targetBlockIndex].width * pix2ang_factor)))
-            diffGain = 1
-            #print( "Found Green signature",targetBlockIndex);
-            panError = PIXY_X_CENTER - (blocks[targetBlockIndex].x)# +int(35*math.sin(5*targetTimeDifference))) #100 - blocks[biggestGreenBlockIndex].x
-            temp = blocks[targetBlockIndex].x+10*math.sin(5*targetTimeDifference)
-            #print ('object dist', objectDist, 'width',blocks[targetBlockIndex].width, 'newX', temp)
-            # amount of steering depends on how much deviation is there
-            diffDrive = diffGain * abs(float(panError)) / PIXY_X_CENTER
-            distError = objectDist - targetDist
-            # this is in float format with sign indicating advancing or retreating
-            advance = driveGain * float(distError) / refDist #max(1,driveGain * float(distError) / refDist)
-            #print('advance', advance, 'diffDrive', diffDrive)
-            targetTimeDifference = (currentTime-targetTime).total_seconds()
-            # if none of the blocks make sense, just pause
-    else:
-        panError = PIXY_X_CENTER-PIXY_MAX_X
+    avoidCollision = 0
+    if biggestTeamBlockIndex<999:
+        if blocks[biggestTeamBlockIndex].height>0.666*PIXY_MAX_Y:
+            avoidCollision = 1
+    targetBlockIndex = min(biggestGreenBlockIndex, biggestOpponentBlockIndex)
+    targetBigEnough = 0;
+    if targetBlockIndex != 999:
+        if blocks[targetBlockIndex].width > 30:
+            targetBigEnough = 1
+    #print('biggest target index', min(biggestGreenBlockIndex,biggestOpponentBlockIndex), 'time', targetTimeDifference, 'team index', biggestTeamBlockIndex);
+    if ((biggestGreenBlockIndex < biggestTeamBlockIndex or biggestOpponentBlockIndex < biggestTeamBlockIndex) and targetTimeDifference<5 and avoidCollision ==0 and targetBigEnough ==1):
+        #if blocks[biggestGreenBlockIndex].signature == GREEN or blocks[biggestOpponentBlockIndex].signature == BLUE: #do we need this if statement?
+        print("attacking");
+        targetBlockIndex = min(biggestGreenBlockIndex, biggestOpponentBlockIndex)
+        if targetTime == 0:
+            targetTime = currentTime
+            turnErrorAccumulator = 0
+            targetTimeDifference = 0
+        if targetTimeDifference <=1:
+            throttle = 0.15
+            objectDist = 300
+        else:
+            throttle = 0.5
+            objectDist = refSize / (2 * math.tan(math.radians(blocks[targetBlockIndex].width * pix2ang_factor)))
+        diffGain = 1
+        #print( "Found Green signature",targetBlockIndex);
+        panError = PIXY_X_CENTER - (blocks[targetBlockIndex].x)# +int(35*math.sin(5*targetTimeDifference))) #100 - blocks[biggestGreenBlockIndex].x
+        temp = blocks[targetBlockIndex].x+10*math.sin(5*targetTimeDifference)
+        #print ('object dist', objectDist, 'width',blocks[targetBlockIndex].width, 'newX', temp)
+        # amount of steering depends on how much deviation is there
         diffDrive = diffGain * abs(float(panError)) / PIXY_X_CENTER
-        throttle = 0.12
-        bias = 0.2
-        advance = 1
+        distError = objectDist - targetDist
+        # this is in float format with sign indicating advancing or retreating
+        advance = driveGain * float(distError) / refDist #max(1,driveGain * float(distError) / refDist)
+        #print('advance', advance, 'diffDrive', diffDrive)
+        targetTimeDifference = (currentTime-targetTime).total_seconds()
+        exploreTime = 0
+        # if none of the blocks make sense, just pause
+    else:
+        if exploreTime == 0:
+            exploreTime = currentTime
+        elif exploreTimeDifference<1.5:
+            panError = 0
+            #PIXY_X_CENTER-PIXY_MAX_X
+            diffDrive = 0.5#diffGain * abs(float(PIXY_X_CENTER-PIXY_MAX_X)) / PIXY_X_CENTER
+            throttle = 0.4
+            bias = 1
+            advance = 1
+            print("spinning")
+        elif exploreTimeDifference<3:
+            panError = 0
+            throttle = 0.6
+            bias = 0
+            diffDrive = 0
+            advance = 1
+            print("not spinning")
         targetTime = 0
-        turnErrorAccumulator = 0
+        #turnErrorAccumulator = 0
         targetTimeDifference=0
         print('no target blocks','biggest red block index', biggestTeamBlockIndex);
-
+        print(exploreTimeDifference)
+        exploreTimeDifference = (currentTime-exploreTime).total_seconds()
+        if exploreTimeDifference>=3:
+            exploreTime = 0
+            exploreTimeDifference = 0
         
     panLoop.update(panError)
     # Update pixy's pan position
