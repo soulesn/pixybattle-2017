@@ -214,8 +214,8 @@ def loadBehavior(behaviorList):
     currentBehaviorIndex = 0
 
 def setSpeedVals(newBehavior):
-    global diffGain, bias, throttle, advance, previousBenchTime
-    diffGain = newBehavior['diffGain']
+    global diffDrive, bias, throttle, advance, previousBenchTime
+    diffDrive = newBehavior['diffDrive']
     bias = newBehavior['bias']
     throttle = newBehavior['throttle']
     advance = newBehavior['advance']
@@ -223,7 +223,7 @@ def setSpeedVals(newBehavior):
 
 
 def executeBehavior():
-    print('bias', bias, 'diffGain', diffGain, 'throttle', throttle, 'advance', advance)
+    print('bias', bias, 'diffDrive', diffDrive, 'throttle', throttle, 'advance', advance)
     global currentBehaviorIndex
     if (currentBehaviorIndex>=len(behaviors)):
         return -1
@@ -354,6 +354,7 @@ def loop():
         if exploreTime == 0:
             explore_behavior_list = [explore_behavior_1, explore_behavior_2]
             loadBehavior(explore_behavior_list)
+            exploreTime = currentTime 
         else:
             panError = 0
             executeBehavior()
